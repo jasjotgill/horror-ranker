@@ -2,6 +2,7 @@ package io.github.jasjotgill.horror_ranker.tmdb;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -12,6 +13,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -41,9 +43,7 @@ public class TmdbClient {
 	}
 
 	public List<MovieSearchResult> search(String query) {
-		if (!configured) {
-			throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Movie search is not configured on the server");
-		}
+		requireConfigured();
 		SearchPage page;
 		try {
 			page = restClient.get()
@@ -55,13 +55,38 @@ public class TmdbClient {
 				.body(SearchPage.class);
 		}
 		catch (RestClientException ex) {
-			// Covers timeouts, connection failures and non-2xx answers from TMDB.
-			throw new ApiException(HttpStatus.BAD_GATEWAY, "Movie search is unavailable right now");
+			throw unavailable();
 		}
 		if (page == null || page.results() == null) {
 			return List.of();
 		}
 		return page.results().stream().limit(MAX_RESULTS).map(this::toResult).toList();
+	}
+
+	// Looks one film up by id, so a pick's title and poster come from TMDB and not from the client.
+	public Optional<MovieSearchResult> findById(long id) {
+		requireConfigured();
+		try {
+			TmdbMovie movie = restClient.get().uri("/movie/{id}", id).retrieve().body(TmdbMovie.class);
+			return Optional.ofNullable(movie).map(this::toResult);
+		}
+		catch (HttpClientErrorException.NotFound ex) {
+			return Optional.empty();
+		}
+		catch (RestClientException ex) {
+			throw unavailable();
+		}
+	}
+
+	private void requireConfigured() {
+		if (!configured) {
+			throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Movie search is not configured on the server");
+		}
+	}
+
+	// For timeouts, connection failures and unexpected non-2xx answers from TMDB.
+	private static ApiException unavailable() {
+		return new ApiException(HttpStatus.BAD_GATEWAY, "Movie search is unavailable right now");
 	}
 
 	private MovieSearchResult toResult(TmdbMovie movie) {

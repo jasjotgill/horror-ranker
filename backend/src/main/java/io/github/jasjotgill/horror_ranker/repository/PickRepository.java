@@ -8,10 +8,16 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface PickRepository extends JpaRepository<Pick, Long> {
 
+	// Every pick of a group, vetoed ones included.
+	List<Pick> findByGroupId(Long groupId);
+
 	// Live (non-vetoed) picks of a group.
 	List<Pick> findByGroupIdAndVetoedFalse(Long groupId);
 
 	// A member's live pick; at most one, guaranteed by the partial unique index.
 	Optional<Pick> findByGroupIdAndMemberIdAndVetoedFalse(Long groupId, Long memberId);
+
+	// A member's most recent pick, live or vetoed.
+	Optional<Pick> findFirstByMemberIdOrderByIdDesc(Long memberId);
 
 }

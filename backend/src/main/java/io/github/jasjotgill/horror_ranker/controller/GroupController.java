@@ -1,5 +1,6 @@
 package io.github.jasjotgill.horror_ranker.controller;
 
+import io.github.jasjotgill.horror_ranker.domain.Member;
 import io.github.jasjotgill.horror_ranker.dto.CreateGroupRequest;
 import io.github.jasjotgill.horror_ranker.dto.GroupStateResponse;
 import io.github.jasjotgill.horror_ranker.dto.JoinGroupRequest;
@@ -47,8 +48,15 @@ public class GroupController {
 	@GetMapping("/{code}")
 	public GroupStateResponse getState(@PathVariable String code,
 			@RequestHeader(value = MemberAuthenticator.TOKEN_HEADER, required = false) String token) {
-		authenticator.requireMember(code, token);
-		return groupService.getState(code);
+		Member caller = authenticator.requireMember(code, token);
+		return groupService.getState(code, caller);
+	}
+
+	@PostMapping("/{code}/start")
+	public GroupStateResponse start(@PathVariable String code,
+			@RequestHeader(value = MemberAuthenticator.TOKEN_HEADER, required = false) String token) {
+		Member caller = authenticator.requireMember(code, token);
+		return groupService.start(code, caller);
 	}
 
 }
