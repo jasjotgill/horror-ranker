@@ -20,6 +20,10 @@ spring:
     baseline-on-migrate: true
     baseline-version: 0
 
+server:
+  # Hosts such as Render tell the app which port to listen on through PORT.
+  port: ${PORT:8080}
+
 tmdb:
   base-url: https://api.themoviedb.org/3
   # Poster paths from TMDB are relative; w342 is a phone-sized width.

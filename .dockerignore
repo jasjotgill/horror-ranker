@@ -1,0 +1,11 @@
+# Keep the build context small and secrets out of it.
+.git
+.env
+.env.*
+docs
+**/node_modules
+**/dist
+**/target
+**/.DS_Store
+.idea
+.vscode
