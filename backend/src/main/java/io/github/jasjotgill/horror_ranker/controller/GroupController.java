@@ -59,4 +59,11 @@ public class GroupController {
 		return groupService.start(code, caller);
 	}
 
+	@PostMapping("/{code}/finish")
+	public GroupStateResponse finish(@PathVariable String code,
+			@RequestHeader(value = MemberAuthenticator.TOKEN_HEADER, required = false) String token) {
+		Member caller = authenticator.requireMember(code, token);
+		return groupService.finish(code, caller);
+	}
+
 }

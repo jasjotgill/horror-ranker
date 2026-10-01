@@ -10,7 +10,11 @@ public interface RatingRepository extends JpaRepository<Rating, Long> {
 
 	Optional<Rating> findByPickIdAndMemberId(Long pickId, Long memberId);
 
+	List<Rating> findByMemberId(Long memberId);
+
 	// "PickGroupId" walks rating -> pick -> group -> id.
 	List<Rating> findByPickGroupId(Long groupId);
+
+	long countByPickGroupId(Long groupId);
 
 }

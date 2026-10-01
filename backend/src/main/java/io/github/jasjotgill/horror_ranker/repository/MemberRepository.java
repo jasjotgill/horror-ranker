@@ -12,6 +12,8 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 
 	List<Member> findByGroupIdOrderByIdAsc(Long groupId);
 
+	int countByGroupId(Long groupId);
+
 	boolean existsByGroupIdAndNicknameIgnoreCase(Long groupId, String nickname);
 
 }

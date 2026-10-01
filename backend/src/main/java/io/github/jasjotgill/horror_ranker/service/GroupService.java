@@ -16,11 +16,13 @@ import io.github.jasjotgill.horror_ranker.domain.Pick;
 import io.github.jasjotgill.horror_ranker.dto.GroupStateResponse;
 import io.github.jasjotgill.horror_ranker.dto.MembershipResponse;
 import io.github.jasjotgill.horror_ranker.dto.PickResponse;
+import io.github.jasjotgill.horror_ranker.dto.RatingResponse;
 import io.github.jasjotgill.horror_ranker.dto.YourStatus;
 import io.github.jasjotgill.horror_ranker.exception.ApiException;
 import io.github.jasjotgill.horror_ranker.repository.MemberRepository;
 import io.github.jasjotgill.horror_ranker.repository.MovieGroupRepository;
 import io.github.jasjotgill.horror_ranker.repository.PickRepository;
+import io.github.jasjotgill.horror_ranker.repository.RatingRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,13 +43,16 @@ public class GroupService {
 
 	private final PickRepository picks;
 
+	private final RatingRepository ratings;
+
 	private final SecretGenerator secrets;
 
 	public GroupService(MovieGroupRepository groups, MemberRepository members, PickRepository picks,
-			SecretGenerator secrets) {
+			RatingRepository ratings, SecretGenerator secrets) {
 		this.groups = groups;
 		this.members = members;
 		this.picks = picks;
+		this.ratings = ratings;
 		this.secrets = secrets;
 	}
 
@@ -107,6 +112,19 @@ public class GroupService {
 		return stateOf(group, caller);
 	}
 
+	// Ends rating early, for the night someone falls asleep before rating the last film.
+	// Normally the group becomes DONE by itself when the last rating arrives.
+	@Transactional
+	public GroupStateResponse finish(String code, Member caller) {
+		MovieGroup group = groups.findWithLockByJoinCode(normalizeCode(code))
+			.orElseThrow(() -> ApiException.notFound("No group with that code"));
+		if (group.getStatus() == GroupStatus.LOBBY) {
+			throw ApiException.conflict("The marathon has not started yet");
+		}
+		group.setStatus(GroupStatus.DONE);
+		return stateOf(group, caller);
+	}
+
 	private GroupStateResponse stateOf(MovieGroup group, Member caller) {
 		List<String> nicknames = members.findByGroupIdOrderByIdAsc(group.getId())
 			.stream()
@@ -127,7 +145,12 @@ public class GroupService {
 			.orElse(null);
 		boolean vetoed = ownPick == null
 				&& picks.findFirstByMemberIdOrderByIdDesc(caller.getId()).map(Pick::isVetoed).orElse(false);
-		return new YourStatus(caller.getNickname(), ownPick, vetoed);
+		List<RatingResponse> ownRatings = ratings.findByMemberId(caller.getId())
+			.stream()
+			.map(RatingResponse::from)
+			.sorted(Comparator.comparing(RatingResponse::pickId))
+			.toList();
+		return new YourStatus(caller.getNickname(), ownPick, vetoed, ownRatings);
 	}
 
 	private MovieGroup findGroup(String code) {

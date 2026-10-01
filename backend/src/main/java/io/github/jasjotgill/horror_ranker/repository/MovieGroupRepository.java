@@ -19,4 +19,7 @@ public interface MovieGroupRepository extends JpaRepository<MovieGroup, Long> {
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	Optional<MovieGroup> findWithLockByJoinCode(String joinCode);
 
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	Optional<MovieGroup> findWithLockById(Long id);
+
 }
