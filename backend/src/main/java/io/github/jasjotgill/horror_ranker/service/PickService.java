@@ -7,18 +7,23 @@ import io.github.jasjotgill.horror_ranker.domain.GroupStatus;
 import io.github.jasjotgill.horror_ranker.domain.Member;
 import io.github.jasjotgill.horror_ranker.domain.MovieGroup;
 import io.github.jasjotgill.horror_ranker.domain.Pick;
+import io.github.jasjotgill.horror_ranker.domain.SeenFlag;
 import io.github.jasjotgill.horror_ranker.dto.MovieSearchResult;
 import io.github.jasjotgill.horror_ranker.dto.PickRequest;
 import io.github.jasjotgill.horror_ranker.dto.PickResponse;
 import io.github.jasjotgill.horror_ranker.exception.ApiException;
 import io.github.jasjotgill.horror_ranker.repository.MovieGroupRepository;
 import io.github.jasjotgill.horror_ranker.repository.PickRepository;
+import io.github.jasjotgill.horror_ranker.repository.SeenFlagRepository;
 import io.github.jasjotgill.horror_ranker.tmdb.TmdbClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PickService {
+
+	// A pick is vetoed once this many members have seen it.
+	static final int SEEN_TO_VETO = 2;
 
 	private static final int MAX_TITLE_LENGTH = 200;
 
@@ -31,11 +36,15 @@ public class PickService {
 
 	private final PickRepository picks;
 
+	private final SeenFlagRepository seenFlags;
+
 	private final TmdbClient tmdb;
 
-	public PickService(MovieGroupRepository groups, PickRepository picks, TmdbClient tmdb) {
+	public PickService(MovieGroupRepository groups, PickRepository picks, SeenFlagRepository seenFlags,
+			TmdbClient tmdb) {
 		this.groups = groups;
 		this.picks = picks;
+		this.seenFlags = seenFlags;
 		this.tmdb = tmdb;
 	}
 
@@ -57,7 +66,7 @@ public class PickService {
 			}
 			else if (sameFilm(existing, candidate)) {
 				// Same wording whoever picked it, so the reply says nothing about the picker.
-				throw ApiException.conflict(existing.isVetoed() ? "Someone has already seen that film. Choose another."
+				throw ApiException.conflict(existing.isVetoed() ? "Too many people here have seen that film. Choose another."
 						: "That film is already picked");
 			}
 		}
@@ -67,21 +76,46 @@ public class PickService {
 			// one-live-pick-per-member index.
 			picks.flush();
 		}
-		return PickResponse.from(picks.save(candidate));
+		return PickResponse.from(picks.save(candidate), 0);
 	}
 
-	// Anyone in the group may flag a pick, and we do not record who did.
+	// "I've seen it". Each member counts once per pick. When SEEN_TO_VETO members have
+	// seen a film, the pick is vetoed and its picker has to choose again.
 	@Transactional
-	public void veto(Member member, Long pickId) {
+	public void markSeen(Member member, Long pickId) {
+		Pick pick = findLobbyPick(member, pickId);
+		if (pick.getMember().getId().equals(member.getId())) {
+			throw ApiException.conflict("You cannot flag your own pick. Change it instead.");
+		}
+		if (seenFlags.findByPickIdAndMemberId(pickId, member.getId()).isEmpty()) {
+			// saveAndFlush so the count below includes this flag.
+			seenFlags.saveAndFlush(new SeenFlag(pick, member));
+		}
+		if (seenFlags.countByPickId(pickId) >= SEEN_TO_VETO) {
+			// No save call needed: the entity is managed, so the change is written at commit.
+			pick.setVetoed(true);
+		}
+	}
+
+	// Undo for a mistaken tap. Has no effect once the pick has been vetoed.
+	@Transactional
+	public void unmarkSeen(Member member, Long pickId) {
+		findLobbyPick(member, pickId);
+		seenFlags.findByPickIdAndMemberId(pickId, member.getId()).ifPresent(seenFlags::delete);
+	}
+
+	private Pick findLobbyPick(Member member, Long pickId) {
 		Pick pick = picks.findById(pickId)
-			.filter(found -> found.getGroup().getId().equals(member.getGroup().getId()))
+			.filter(found -> !found.isVetoed() && found.getGroup().getId().equals(member.getGroup().getId()))
 			// A pick in someone else's group looks exactly like one that does not exist.
 			.orElseThrow(() -> ApiException.notFound("No such pick"));
-		if (pick.getGroup().getStatus() != GroupStatus.LOBBY) {
-			throw ApiException.conflict("Picks can only be flagged before the marathon starts");
+		// Locked so flags arriving together are counted one after another, not all as "one short".
+		MovieGroup group = groups.findWithLockById(pick.getGroup().getId())
+			.orElseThrow(() -> ApiException.notFound("No such pick"));
+		if (group.getStatus() != GroupStatus.LOBBY) {
+			throw ApiException.conflict("Films can only be flagged before the marathon starts");
 		}
-		// No save call needed: the entity is managed, so the change is written at commit.
-		pick.setVetoed(true);
+		return pick;
 	}
 
 	private Pick buildPick(MovieGroup group, Member member, PickRequest request) {

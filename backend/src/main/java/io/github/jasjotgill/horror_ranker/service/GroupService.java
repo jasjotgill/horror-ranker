@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -13,6 +14,7 @@ import io.github.jasjotgill.horror_ranker.domain.GroupStatus;
 import io.github.jasjotgill.horror_ranker.domain.Member;
 import io.github.jasjotgill.horror_ranker.domain.MovieGroup;
 import io.github.jasjotgill.horror_ranker.domain.Pick;
+import io.github.jasjotgill.horror_ranker.domain.SeenFlag;
 import io.github.jasjotgill.horror_ranker.dto.GroupStateResponse;
 import io.github.jasjotgill.horror_ranker.dto.MembershipResponse;
 import io.github.jasjotgill.horror_ranker.dto.PickResponse;
@@ -23,6 +25,7 @@ import io.github.jasjotgill.horror_ranker.repository.MemberRepository;
 import io.github.jasjotgill.horror_ranker.repository.MovieGroupRepository;
 import io.github.jasjotgill.horror_ranker.repository.PickRepository;
 import io.github.jasjotgill.horror_ranker.repository.RatingRepository;
+import io.github.jasjotgill.horror_ranker.repository.SeenFlagRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,14 +48,17 @@ public class GroupService {
 
 	private final RatingRepository ratings;
 
+	private final SeenFlagRepository seenFlags;
+
 	private final SecretGenerator secrets;
 
 	public GroupService(MovieGroupRepository groups, MemberRepository members, PickRepository picks,
-			RatingRepository ratings, SecretGenerator secrets) {
+			RatingRepository ratings, SeenFlagRepository seenFlags, SecretGenerator secrets) {
 		this.groups = groups;
 		this.members = members;
 		this.picks = picks;
 		this.ratings = ratings;
+		this.seenFlags = seenFlags;
 		this.secrets = secrets;
 	}
 
@@ -130,19 +136,28 @@ public class GroupService {
 			.stream()
 			.map(Member::getNickname)
 			.toList();
+		List<SeenFlag> flags = seenFlags.findByPickGroupId(group.getId());
+		// How many members have seen each pick. Only the number leaves the server.
+		Map<Long, Long> seenCounts = flags.stream()
+			.collect(Collectors.groupingBy(flag -> flag.getPick().getId(), Collectors.counting()));
 		List<PickResponse> livePicks = picks.findByGroupIdAndVetoedFalse(group.getId())
 			.stream()
 			.sorted(DISPLAY_ORDER)
-			.map(PickResponse::from)
+			.map(pick -> PickResponse.from(pick, seenCounts.getOrDefault(pick.getId(), 0L).intValue()))
 			.toList();
 		return new GroupStateResponse(group.getJoinCode(), group.getName(), group.getStatus(), nicknames, livePicks,
-				livePicks.size(), yourStatus(group, caller));
+				livePicks.size(), yourStatus(group, caller, flags, seenCounts));
 	}
 
-	private YourStatus yourStatus(MovieGroup group, Member caller) {
+	private YourStatus yourStatus(MovieGroup group, Member caller, List<SeenFlag> flags, Map<Long, Long> seenCounts) {
 		PickResponse ownPick = picks.findByGroupIdAndMemberIdAndVetoedFalse(group.getId(), caller.getId())
-			.map(PickResponse::from)
+			.map(pick -> PickResponse.from(pick, seenCounts.getOrDefault(pick.getId(), 0L).intValue()))
 			.orElse(null);
+		List<Long> seenPickIds = flags.stream()
+			.filter(flag -> flag.getMember().getId().equals(caller.getId()))
+			.map(flag -> flag.getPick().getId())
+			.sorted()
+			.toList();
 		boolean vetoed = ownPick == null
 				&& picks.findFirstByMemberIdOrderByIdDesc(caller.getId()).map(Pick::isVetoed).orElse(false);
 		List<RatingResponse> ownRatings = ratings.findByMemberId(caller.getId())
@@ -150,7 +165,7 @@ public class GroupService {
 			.map(RatingResponse::from)
 			.sorted(Comparator.comparing(RatingResponse::pickId))
 			.toList();
-		return new YourStatus(caller.getNickname(), ownPick, vetoed, ownRatings);
+		return new YourStatus(caller.getNickname(), ownPick, vetoed, seenPickIds, ownRatings);
 	}
 
 	private MovieGroup findGroup(String code) {

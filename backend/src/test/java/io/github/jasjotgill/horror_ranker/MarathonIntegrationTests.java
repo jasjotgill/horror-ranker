@@ -2,6 +2,7 @@ package io.github.jasjotgill.horror_ranker;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -33,7 +34,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 @AutoConfigureMockMvc
 class MarathonIntegrationTests {
 
-	private static final Set<String> PICK_FIELDS = Set.of("id", "title", "releaseYear", "posterUrl", "watchOrder");
+	private static final Set<String> PICK_FIELDS = Set.of("id", "title", "releaseYear", "posterUrl", "watchOrder",
+			"seenCount");
 
 	@Autowired
 	private MockMvc mvc;
@@ -90,7 +92,7 @@ class MarathonIntegrationTests {
 		assertThat(JsonPath.<List<Integer>>read(results, "$.films[*].raterCount")).containsExactly(2, 2, 2);
 	}
 
-	// The anonymity guarantee: a pick in the group state has exactly the five film fields,
+	// The anonymity guarantee: a pick in the group state has exactly the film fields and a count,
 	// and none of its values is a member's nickname.
 	@Test
 	void groupStateNeverRevealsWhoPickedWhat() throws Exception {
@@ -148,6 +150,45 @@ class MarathonIntegrationTests {
 		assertThat(JsonPath.<String>read(error, "$.message")).isEqualTo("That film is already picked")
 			.doesNotContain("Jas");
 		assertThat(JsonPath.<List<Object>>read(state(sam), "$.picks")).hasSize(1);
+	}
+
+	@Test
+	void vetoesAPickOnceTwoPeopleHaveSeenIt() throws Exception {
+		Player picker = createGroup("Seen It", "Picker");
+		Player ana = join(picker.code(), "Ana");
+		Player ben = join(picker.code(), "Ben");
+		int film = pickManually(picker, "Well Known Film", 1999);
+
+		// The picker cannot flag their own film.
+		send(post("/api/picks/{id}/seen", film), picker, null, 409);
+
+		// One person has seen it, tapping twice: that counts once, so the film stays.
+		send(post("/api/picks/{id}/seen", film), ana, null, 204);
+		send(post("/api/picks/{id}/seen", film), ana, null, 204);
+		assertThat(JsonPath.<List<Integer>>read(state(ben), "$.picks[*].seenCount")).containsExactly(1);
+		assertThat(JsonPath.<List<Integer>>read(state(ana), "$.you.seenPickIds")).containsExactly(film);
+		assertThat(JsonPath.<List<Integer>>read(state(ben), "$.you.seenPickIds")).isEmpty();
+
+		// Ana takes it back, then flags again: still one.
+		send(delete("/api/picks/{id}/seen", film), ana, null, 204);
+		assertThat(JsonPath.<List<Integer>>read(state(ben), "$.picks[*].seenCount")).containsExactly(0);
+		send(post("/api/picks/{id}/seen", film), ana, null, 204);
+		assertThat(JsonPath.<Boolean>read(state(picker), "$.you.pickVetoed")).isFalse();
+
+		// A second person has seen it: the pick is removed.
+		send(post("/api/picks/{id}/seen", film), ben, null, 204);
+		assertThat(JsonPath.<List<Object>>read(state(ben), "$.picks")).isEmpty();
+
+		// Only the picker is told, and they cannot simply pick the same film again.
+		assertThat(JsonPath.<Boolean>read(state(picker), "$.you.pickVetoed")).isTrue();
+		assertThat(JsonPath.<Boolean>read(state(ana), "$.you.pickVetoed")).isFalse();
+		send(post("/api/groups/{code}/picks", picker.code()), picker, """
+				{"title": "Well Known Film", "year": 1999}
+				""", 409);
+		send(post("/api/groups/{code}/start", picker.code()), picker, null, 409);
+
+		pickManually(picker, "Obscure Film", 2003);
+		assertThat(JsonPath.<Boolean>read(state(picker), "$.you.pickVetoed")).isFalse();
 	}
 
 	@Test

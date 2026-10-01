@@ -6,6 +6,7 @@ import io.github.jasjotgill.horror_ranker.dto.PickResponse;
 import io.github.jasjotgill.horror_ranker.service.MemberAuthenticator;
 import io.github.jasjotgill.horror_ranker.service.PickService;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -35,12 +36,21 @@ public class PickController {
 		return pickService.submitPick(caller, request);
 	}
 
-	@PostMapping("/picks/{id}/veto")
+	// "I've seen it". Sending it twice counts once.
+	@PostMapping("/picks/{id}/seen")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
-	public void veto(@PathVariable Long id,
+	public void markSeen(@PathVariable Long id,
 			@RequestHeader(value = MemberAuthenticator.TOKEN_HEADER, required = false) String token) {
 		Member caller = authenticator.requireMember(token);
-		pickService.veto(caller, id);
+		pickService.markSeen(caller, id);
+	}
+
+	@DeleteMapping("/picks/{id}/seen")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void unmarkSeen(@PathVariable Long id,
+			@RequestHeader(value = MemberAuthenticator.TOKEN_HEADER, required = false) String token) {
+		Member caller = authenticator.requireMember(token);
+		pickService.unmarkSeen(caller, id);
 	}
 
 }
