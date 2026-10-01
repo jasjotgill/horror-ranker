@@ -1,0 +1,36 @@
+package io.github.jasjotgill.horror_ranker.service;
+
+import java.security.SecureRandom;
+import java.util.Base64;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class SecretGenerator {
+
+	// No O, 0, I or 1: they are too easy to mix up when a code is read aloud.
+	private static final String JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+	private static final int JOIN_CODE_LENGTH = 4;
+
+	private static final int TOKEN_BYTES = 32;
+
+	// SecureRandom, not Random: its output cannot be predicted from earlier values.
+	private final SecureRandom random = new SecureRandom();
+
+	public String newJoinCode() {
+		StringBuilder code = new StringBuilder(JOIN_CODE_LENGTH);
+		for (int i = 0; i < JOIN_CODE_LENGTH; i++) {
+			code.append(JOIN_CODE_ALPHABET.charAt(random.nextInt(JOIN_CODE_ALPHABET.length())));
+		}
+		return code.toString();
+	}
+
+	// 32 random bytes as 43 URL-safe characters.
+	public String newToken() {
+		byte[] bytes = new byte[TOKEN_BYTES];
+		random.nextBytes(bytes);
+		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+	}
+
+}
