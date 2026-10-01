@@ -9,10 +9,16 @@ import org.testcontainers.utility.DockerImageName;
 @TestConfiguration(proxyBeanMethods = false)
 class TestcontainersConfiguration {
 
+	// The same image as docker-compose.yml, so tests run against what runs for real.
+	// Testcontainers only accepts images it knows speak the Postgres protocol, hence the substitute.
+	private static final DockerImageName POSTGIS = DockerImageName.parse("postgis/postgis:16-3.4")
+		.asCompatibleSubstituteFor("postgres");
+
+	// @ServiceConnection points the datasource at this container, overriding application.yaml.
 	@Bean
 	@ServiceConnection
 	PostgreSQLContainer postgresContainer() {
-		return new PostgreSQLContainer(DockerImageName.parse("postgres:latest"));
+		return new PostgreSQLContainer(POSTGIS);
 	}
 
 }
