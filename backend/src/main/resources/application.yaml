@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: horror-ranker
+  config:
+    # Load the repo-root .env (relative to backend/, where mvnw runs) as a properties file.
+    # "optional:" means no failure when it is absent, e.g. in CI or in the deployed container.
+    import: optional:file:../.env[.properties]
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${POSTGRES_DB}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+  jpa:
+    hibernate:
+      # Flyway owns the schema; Hibernate only checks that entities match it.
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    # The database is not empty (PostGIS ships spatial_ref_sys), so Flyway needs a baseline.
+    # Baseline at 0 so V1 still counts as pending and runs.
+    baseline-on-migrate: true
+    baseline-version: 0
+
+management:
+  endpoint:
+    health:
+      show-details: always
