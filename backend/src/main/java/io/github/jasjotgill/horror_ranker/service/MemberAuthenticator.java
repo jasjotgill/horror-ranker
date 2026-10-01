@@ -22,15 +22,20 @@ public class MemberAuthenticator {
 	// The transaction keeps the session open while member.getGroup() is lazily loaded.
 	@Transactional(readOnly = true)
 	public Member requireMember(String code, String token) {
-		if (token == null || token.isBlank()) {
-			throw ApiException.unauthorized("Missing " + TOKEN_HEADER + " header");
-		}
-		Member member = members.findByToken(token)
-			.orElseThrow(() -> ApiException.unauthorized("Unknown member token"));
+		Member member = requireMember(token);
 		if (!member.getGroup().getJoinCode().equalsIgnoreCase(code.strip())) {
 			throw ApiException.forbidden("You are not a member of this group");
 		}
 		return member;
+	}
+
+	// For endpoints with no group code in the URL: any valid member will do.
+	@Transactional(readOnly = true)
+	public Member requireMember(String token) {
+		if (token == null || token.isBlank()) {
+			throw ApiException.unauthorized("Missing " + TOKEN_HEADER + " header");
+		}
+		return members.findByToken(token).orElseThrow(() -> ApiException.unauthorized("Unknown member token"));
 	}
 
 }

@@ -20,6 +20,14 @@ spring:
     baseline-on-migrate: true
     baseline-version: 0
 
+tmdb:
+  base-url: https://api.themoviedb.org/3
+  # Poster paths from TMDB are relative; w342 is a phone-sized width.
+  image-base-url: https://image.tmdb.org/t/p/w342
+  # The "API Read Access Token" from TMDB. Empty default so the app still starts without it;
+  # search then answers 503.
+  api-token: ${TMDB_API_TOKEN:}
+
 management:
   endpoint:
     health:
