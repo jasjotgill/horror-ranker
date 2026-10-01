@@ -1,0 +1,336 @@
+/* Phone first: one narrow column, big touch targets, dark for a room with the lights off. */
+:root {
+  --bg: #0f0b10;
+  --card: #1b151d;
+  --line: #34283a;
+  --text: #f3ecec;
+  --muted: #a8999f;
+  --accent: #c1121f;
+  --accent-strong: #e5383b;
+  --warning: #f4a261;
+
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  max-width: 480px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.25rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+  text-align: center;
+}
+
+h2 {
+  font-size: 1.05rem;
+}
+
+h3 {
+  font-size: 1rem;
+}
+
+.app-footer {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 0;
+  min-width: 0;
+}
+
+.center {
+  text-align: center;
+  align-self: center;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small-text {
+  font-size: 0.85rem;
+}
+
+/* Forms */
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+input {
+  font: inherit;
+  /* 16px or more stops iOS Safari zooming in when an input gets focus. */
+  font-size: 1rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+input:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.code-input {
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  font-weight: 700;
+}
+
+button {
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--line);
+  border: 0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+}
+
+button.small {
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+button.small[aria-pressed='true'] {
+  background: var(--accent);
+}
+
+button.link {
+  background: none;
+  color: var(--accent-strong);
+  padding: 0;
+  min-height: 0;
+  font-weight: 500;
+  text-decoration: underline;
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.tabs button[aria-selected='true'] {
+  background: var(--accent);
+}
+
+/* Fixed height, so the page does not shift when the status text comes and goes. */
+.search-status {
+  min-height: 1.3em;
+}
+
+/* Results from the previous keystrokes, dimmed while newer ones load. */
+.results.stale {
+  opacity: 0.5;
+}
+
+.manual {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+/* Search results scroll inside this box instead of making the page longer. */
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 45dvh;
+  overflow-y: auto;
+  /* Reaching the end of the list does not start scrolling the page behind it. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+/* Messages */
+.banner {
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--line);
+  font-size: 0.9rem;
+}
+
+.banner.error {
+  background: #4a1418;
+  color: #ffd7d9;
+}
+
+.banner.warning {
+  background: #4a3216;
+  color: #ffe2c2;
+}
+
+/* Group header */
+.group-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 0.9rem;
+}
+
+.group-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.join-code {
+  font-size: 2.75rem;
+  font-weight: 800;
+  letter-spacing: 0.25em;
+  /* Balances the trailing letter-spacing so the code looks centred. */
+  margin-right: -0.25em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Film rows */
+.film-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.film-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.film-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.poster {
+  width: 54px;
+  height: 81px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--line);
+}
+
+.poster.placeholder {
+  display: grid;
+  place-items: center;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--muted);
+  border: 1px dashed var(--muted);
+}
+
+.order {
+  width: 1.5em;
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--accent-strong);
+  flex-shrink: 0;
+}
+
+.winner {
+  background: #2a1a1d;
+  border-radius: 8px;
+  padding: 8px;
+  margin: 0 -8px;
+}
+
+.final-score {
+  font-size: 1.4rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Rating */
+fieldset.card legend {
+  font-weight: 700;
+  padding: 0 6px;
+}
+
+.score-row {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 4px;
+  margin-top: 10px;
+}
+
+button.score {
+  padding: 0;
+  min-height: 44px;
+  font-variant-numeric: tabular-nums;
+}
+
+button.score[aria-pressed='true'] {
+  background: var(--accent);
+}
