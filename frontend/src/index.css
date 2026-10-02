@@ -8,6 +8,7 @@
   --accent: #c1121f;
   --accent-strong: #e5383b;
   --warning: #f4a261;
+  --gold: #e9b949;
 
   color-scheme: dark;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -121,6 +122,14 @@ input {
   min-width: 0;
 }
 
+/* Example text in an empty box: faint, so it cannot be mistaken for something typed in. */
+input::placeholder {
+  color: var(--muted);
+  opacity: 0.4;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
 input:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--accent-strong);
@@ -164,6 +173,15 @@ button.small[aria-pressed='true'] {
   background: var(--accent);
 }
 
+/* A square button holding only an icon. */
+button.icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
 button.link {
   background: none;
   color: var(--accent-strong);
@@ -175,8 +193,12 @@ button.link {
 
 .tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 8px;
+}
+
+.tabs.two {
+  grid-template-columns: 1fr 1fr;
 }
 
 .tabs button[aria-selected='true'] {
@@ -250,9 +272,49 @@ button.link {
   font-size: 2.75rem;
   font-weight: 800;
   letter-spacing: 0.25em;
-  /* Balances the trailing letter-spacing so the code looks centred. */
-  margin-right: -0.25em;
   font-variant-numeric: tabular-nums;
+}
+
+/* A code with its copy button beside it. */
+.code-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.rejoin-code {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* People list */
+.person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+
+.person-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.person button {
+  margin-left: auto;
+}
+
+.tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent-strong);
+  border: 1px solid var(--accent-strong);
+  border-radius: 999px;
+  padding: 2px 8px;
+  flex-shrink: 0;
 }
 
 /* Film rows */
@@ -310,6 +372,29 @@ button.link {
   font-size: 1.4rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+}
+
+/* Golden ticket */
+.gold {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.banner.gold-banner {
+  background: #3d3210;
+  color: #ffe9a8;
+  border: 1px solid var(--gold);
+}
+
+button.ticket-choice {
+  text-align: left;
+  border: 1px solid var(--line);
+}
+
+button.ticket-choice.chosen {
+  background: #3d3210;
+  border-color: var(--gold);
+  color: #ffe9a8;
 }
 
 /* Rating */

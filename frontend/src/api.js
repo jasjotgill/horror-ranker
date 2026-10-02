@@ -59,6 +59,10 @@ export const api = {
   createGroup: (name, nickname) => request('POST', '/api/groups', { body: { name, nickname } }),
   joinGroup: (code, nickname) =>
     request('POST', `/api/groups/${encodeURIComponent(code)}/members`, { body: { nickname } }),
+  rejoinGroup: (code, rejoinCode) =>
+    request('POST', `/api/groups/${encodeURIComponent(code)}/rejoin`, { body: { rejoinCode } }),
+  leave: (session) => request('POST', `${group(session)}/leave`, session),
+  kick: (session, nickname) => request('POST', `${group(session)}/kick`, { token: session.token, body: { nickname } }),
   state: (session) => request('GET', group(session), session),
   search: (session, query, signal) =>
     request('GET', `/api/movies/search?q=${encodeURIComponent(query)}`, { token: session.token, signal }),
@@ -68,6 +72,8 @@ export const api = {
   start: (session) => request('POST', `${group(session)}/start`, session),
   rate: (session, pickId, scores) =>
     request('PUT', `/api/picks/${pickId}/rating`, { token: session.token, body: scores }),
+  giveTicket: (session, nickname) =>
+    request('PUT', `${group(session)}/ticket`, { token: session.token, body: { nickname } }),
   finish: (session) => request('POST', `${group(session)}/finish`, session),
   results: (session) => request('GET', `${group(session)}/results`, session),
 }

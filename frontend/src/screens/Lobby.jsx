@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import CopyButton from '../components/CopyButton'
 import ErrorMessage from '../components/ErrorMessage'
+import People from '../components/People'
 import Poster from '../components/Poster'
 
 // How long typing must pause before a search is sent.
@@ -42,12 +44,15 @@ export default function Lobby({ session, group, refresh }) {
   return (
     <div className="stack">
       <section className="card center">
-        <p className="muted">Join code</p>
-        <p className="join-code">{group.code}</p>
-        <p className="muted">
-          {members.length} {members.length === 1 ? 'person' : 'people'} here: {members.join(', ')}
-        </p>
+        <p className="muted">Group code</p>
+        <div className="code-line">
+          <span className="join-code">{group.code}</span>
+          <CopyButton text={group.code} label="Copy group code" />
+        </div>
+        <p className="muted small-text">Share this code so friends can join.</p>
       </section>
+
+      <People session={session} group={group} refresh={refresh} />
 
       <ErrorMessage>{error}</ErrorMessage>
 
@@ -89,12 +94,15 @@ export default function Lobby({ session, group, refresh }) {
         })}
       </section>
 
-      <button className="primary" disabled={!canStart} onClick={start}>
-        {canStart
-          ? 'Start the marathon'
-          : members.length < 2
-            ? 'Waiting for more people'
-            : `Waiting for ${waitingFor} more ${waitingFor === 1 ? 'pick' : 'picks'}`}
+      {/* Only the host can start; everyone else sees what the group is waiting for. */}
+      <button className="primary" disabled={!canStart || !you.host} onClick={start}>
+        {members.length < 2
+          ? 'Waiting for more people'
+          : !canStart
+            ? `Waiting for ${waitingFor} more ${waitingFor === 1 ? 'pick' : 'picks'}`
+            : you.host
+              ? 'Start the marathon'
+              : `Waiting for ${group.host} to start`}
       </button>
     </div>
   )
