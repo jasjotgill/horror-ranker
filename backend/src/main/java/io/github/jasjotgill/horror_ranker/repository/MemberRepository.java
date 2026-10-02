@@ -12,8 +12,14 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 
 	List<Member> findByGroupIdOrderByIdAsc(Long groupId);
 
+	Optional<Member> findByGroupIdAndNicknameIgnoreCase(Long groupId, String nickname);
+
+	Optional<Member> findByGroupIdAndRejoinCode(Long groupId, String rejoinCode);
+
 	int countByGroupId(Long groupId);
 
 	boolean existsByGroupIdAndNicknameIgnoreCase(Long groupId, String nickname);
+
+	boolean existsByGroupIdAndRejoinCode(Long groupId, String rejoinCode);
 
 }

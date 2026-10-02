@@ -25,16 +25,28 @@ public class Member {
 	@Column(nullable = false)
 	private String nickname;
 
-	@Column(nullable = false, unique = true, updatable = false)
+	// The login secret held by one browser. Replaced when the member rejoins elsewhere,
+	// which is what logs the old browser out.
+	@Column(nullable = false, unique = true)
 	private String token;
+
+	// A short code the member can type on another device to get back in as themselves.
+	@Column(name = "rejoin_code", nullable = false, updatable = false)
+	private String rejoinCode;
+
+	// The host starts the marathon and can remove people. One per group.
+	@Column(nullable = false)
+	private boolean host;
 
 	protected Member() {
 	}
 
-	public Member(MovieGroup group, String nickname, String token) {
+	public Member(MovieGroup group, String nickname, String token, String rejoinCode, boolean host) {
 		this.group = group;
 		this.nickname = nickname;
 		this.token = token;
+		this.rejoinCode = rejoinCode;
+		this.host = host;
 	}
 
 	public Long getId() {
@@ -51,6 +63,22 @@ public class Member {
 
 	public String getToken() {
 		return token;
+	}
+
+	public void setToken(String token) {
+		this.token = token;
+	}
+
+	public String getRejoinCode() {
+		return rejoinCode;
+	}
+
+	public boolean isHost() {
+		return host;
+	}
+
+	public void setHost(boolean host) {
+		this.host = host;
 	}
 
 }

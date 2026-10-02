@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import io.github.jasjotgill.horror_ranker.domain.GoldenTicket;
 import io.github.jasjotgill.horror_ranker.domain.GroupStatus;
 import io.github.jasjotgill.horror_ranker.domain.Member;
 import io.github.jasjotgill.horror_ranker.domain.MovieGroup;
@@ -21,6 +22,7 @@ import io.github.jasjotgill.horror_ranker.dto.PickResponse;
 import io.github.jasjotgill.horror_ranker.dto.RatingResponse;
 import io.github.jasjotgill.horror_ranker.dto.YourStatus;
 import io.github.jasjotgill.horror_ranker.exception.ApiException;
+import io.github.jasjotgill.horror_ranker.repository.GoldenTicketRepository;
 import io.github.jasjotgill.horror_ranker.repository.MemberRepository;
 import io.github.jasjotgill.horror_ranker.repository.MovieGroupRepository;
 import io.github.jasjotgill.horror_ranker.repository.PickRepository;
@@ -50,10 +52,17 @@ public class GroupService {
 
 	private final SeenFlagRepository seenFlags;
 
+	private final GoldenTicketRepository tickets;
+
+	private final RatingService ratingService;
+
 	private final SecretGenerator secrets;
 
 	public GroupService(MovieGroupRepository groups, MemberRepository members, PickRepository picks,
-			RatingRepository ratings, SeenFlagRepository seenFlags, SecretGenerator secrets) {
+			RatingRepository ratings, SeenFlagRepository seenFlags, GoldenTicketRepository tickets,
+			RatingService ratingService, SecretGenerator secrets) {
+		this.tickets = tickets;
+		this.ratingService = ratingService;
 		this.groups = groups;
 		this.members = members;
 		this.picks = picks;
@@ -66,7 +75,9 @@ public class GroupService {
 	@Transactional
 	public MembershipResponse createGroup(String name, String nickname) {
 		MovieGroup group = groups.save(new MovieGroup(name.strip(), newUniqueJoinCode()));
-		Member creator = members.save(new Member(group, nickname.strip(), secrets.newToken()));
+		// Whoever creates the group is its host.
+		Member creator = members
+			.save(new Member(group, nickname.strip(), secrets.newToken(), secrets.newRejoinCode(), true));
 		return MembershipResponse.from(creator);
 	}
 
@@ -80,7 +91,8 @@ public class GroupService {
 		if (members.existsByGroupIdAndNicknameIgnoreCase(group.getId(), trimmed)) {
 			throw ApiException.conflict("That nickname is already taken in this group");
 		}
-		Member member = members.save(new Member(group, trimmed, secrets.newToken()));
+		Member member = members
+			.save(new Member(group, trimmed, secrets.newToken(), newUniqueRejoinCode(group), false));
 		return MembershipResponse.from(member);
 	}
 
@@ -99,11 +111,20 @@ public class GroupService {
 			throw ApiException.conflict("This marathon has already started");
 		}
 		List<Member> groupMembers = members.findByGroupIdOrderByIdAsc(group.getId());
+		// Checked against rows read in this transaction, not the caller object, which is older.
+		boolean callerIsHost = groupMembers.stream()
+			.anyMatch(member -> member.isHost() && member.getId().equals(caller.getId()));
+		if (!callerIsHost) {
+			throw ApiException.forbidden("Only the host can start the marathon");
+		}
 		if (groupMembers.size() < MIN_MEMBERS_TO_START) {
 			throw ApiException.conflict("A marathon needs at least " + MIN_MEMBERS_TO_START + " people");
 		}
 		List<Pick> livePicks = new ArrayList<>(picks.findByGroupIdAndVetoedFalse(group.getId()));
-		Set<Long> pickers = livePicks.stream().map(pick -> pick.getMember().getId()).collect(Collectors.toSet());
+		Set<Long> pickers = livePicks.stream()
+			.filter(pick -> pick.getMember() != null)
+			.map(pick -> pick.getMember().getId())
+			.collect(Collectors.toSet());
 		if (!groupMembers.stream().allMatch(member -> pickers.contains(member.getId()))) {
 			throw ApiException.conflict("Not everyone has picked a film yet");
 		}
@@ -118,8 +139,9 @@ public class GroupService {
 		return stateOf(group, caller);
 	}
 
-	// Ends rating early, for the night someone falls asleep before rating the last film.
-	// Normally the group becomes DONE by itself when the last rating arrives.
+	// Ends the current stage early, for the night someone falls asleep: rating moves on to
+	// golden tickets, and golden tickets move on to results. Normally each stage ends by
+	// itself when the last rating or ticket arrives.
 	@Transactional
 	public GroupStateResponse finish(String code, Member caller) {
 		MovieGroup group = groups.findWithLockByJoinCode(normalizeCode(code))
@@ -127,15 +149,19 @@ public class GroupService {
 		if (group.getStatus() == GroupStatus.LOBBY) {
 			throw ApiException.conflict("The marathon has not started yet");
 		}
-		group.setStatus(GroupStatus.DONE);
+		if (group.getStatus() == GroupStatus.WATCHING) {
+			ratingService.endRating(group);
+		}
+		else {
+			group.setStatus(GroupStatus.DONE);
+		}
 		return stateOf(group, caller);
 	}
 
 	private GroupStateResponse stateOf(MovieGroup group, Member caller) {
-		List<String> nicknames = members.findByGroupIdOrderByIdAsc(group.getId())
-			.stream()
-			.map(Member::getNickname)
-			.toList();
+		List<Member> groupMembers = members.findByGroupIdOrderByIdAsc(group.getId());
+		List<String> nicknames = groupMembers.stream().map(Member::getNickname).toList();
+		String host = groupMembers.stream().filter(Member::isHost).map(Member::getNickname).findFirst().orElse(null);
 		List<SeenFlag> flags = seenFlags.findByPickGroupId(group.getId());
 		// How many members have seen each pick. Only the number leaves the server.
 		Map<Long, Long> seenCounts = flags.stream()
@@ -145,11 +171,18 @@ public class GroupService {
 			.sorted(DISPLAY_ORDER)
 			.map(pick -> PickResponse.from(pick, seenCounts.getOrDefault(pick.getId(), 0L).intValue()))
 			.toList();
-		return new GroupStateResponse(group.getJoinCode(), group.getName(), group.getStatus(), nicknames, livePicks,
-				livePicks.size(), yourStatus(group, caller, flags, seenCounts));
+		List<GoldenTicket> groupTickets = tickets.findByGiverGroupId(group.getId());
+		String ticketFor = groupTickets.stream()
+			.filter(ticket -> ticket.getGiver().getId().equals(caller.getId()))
+			.map(ticket -> ticket.getRecipient().getNickname())
+			.findFirst()
+			.orElse(null);
+		return new GroupStateResponse(group.getJoinCode(), group.getName(), group.getStatus(), host, nicknames,
+				livePicks, livePicks.size(), groupTickets.size(), yourStatus(group, caller, flags, seenCounts, ticketFor));
 	}
 
-	private YourStatus yourStatus(MovieGroup group, Member caller, List<SeenFlag> flags, Map<Long, Long> seenCounts) {
+	private YourStatus yourStatus(MovieGroup group, Member caller, List<SeenFlag> flags, Map<Long, Long> seenCounts,
+			String ticketFor) {
 		PickResponse ownPick = picks.findByGroupIdAndMemberIdAndVetoedFalse(group.getId(), caller.getId())
 			.map(pick -> PickResponse.from(pick, seenCounts.getOrDefault(pick.getId(), 0L).intValue()))
 			.orElse(null);
@@ -165,7 +198,8 @@ public class GroupService {
 			.map(RatingResponse::from)
 			.sorted(Comparator.comparing(RatingResponse::pickId))
 			.toList();
-		return new YourStatus(caller.getNickname(), ownPick, vetoed, seenPickIds, ownRatings);
+		return new YourStatus(caller.getNickname(), caller.isHost(), caller.getRejoinCode(), ownPick, vetoed,
+				seenPickIds, ownRatings, ticketFor);
 	}
 
 	private MovieGroup findGroup(String code) {
@@ -175,6 +209,14 @@ public class GroupService {
 
 	private static String normalizeCode(String code) {
 		return code.strip().toUpperCase(Locale.ROOT);
+	}
+
+	private String newUniqueRejoinCode(MovieGroup group) {
+		String code = secrets.newRejoinCode();
+		while (members.existsByGroupIdAndRejoinCode(group.getId(), code)) {
+			code = secrets.newRejoinCode();
+		}
+		return code;
 	}
 
 	private String newUniqueJoinCode() {

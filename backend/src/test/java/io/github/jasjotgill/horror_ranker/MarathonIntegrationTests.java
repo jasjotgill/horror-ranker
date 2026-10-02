@@ -54,6 +54,8 @@ class MarathonIntegrationTests {
 		int filmB = pickManually(sam, "Film B", 2002);
 		int filmC = pickManually(ria, "Film C", 2003);
 
+		// Only the host (the creator) can start.
+		send(post("/api/groups/{code}/start", jas.code()), sam, null, 403);
 		String started = send(post("/api/groups/{code}/start", jas.code()), jas, null, 200);
 		assertThat(JsonPath.<String>read(started, "$.status")).isEqualTo("WATCHING");
 		assertThat(JsonPath.<List<Integer>>read(started, "$.picks[*].watchOrder")).containsExactly(1, 2, 3);
@@ -64,32 +66,57 @@ class MarathonIntegrationTests {
 			assertThat(JsonPath.<List<Integer>>read(state(player), "$.picks[*].id")).isEqualTo(order);
 		}
 
-		// Every film averages 7.0 from its two eligible raters. Each picker also gives
-		// their own film straight 10s, which must be ignored.
-		rate(jas, filmA, 10, 10, 10, 10, 10);
+		// Nobody can rate their own pick.
+		rateExpecting(409, jas, filmA, 10, 10, 10, 10, 10);
+
+		// Every film averages 7.0 from the two people who did not pick it.
 		rate(sam, filmA, 6, 6, 6, 6, 6);
 		rate(ria, filmA, 8, 8, 8, 8, 8);
 
-		rate(sam, filmB, 10, 10, 10, 10, 10);
 		rate(jas, filmB, 7, 7, 7, 7, 5);
 		rate(ria, filmB, 7, 7, 7, 7, 9);
 
-		rate(ria, filmC, 10, 10, 10, 10, 10);
 		rate(jas, filmC, 6, 6, 6, 6, 9);
 		send(get("/api/groups/{code}/results", jas.code()), jas, null, 409);
 		rate(sam, filmC, 7, 7, 7, 7, 9);
 
-		// The last rating finishes the marathon.
-		assertThat(JsonPath.<String>read(state(jas), "$.status")).isEqualTo("DONE");
+		// The last rating ends rating. Results wait for the golden tickets.
+		assertThat(JsonPath.<String>read(state(jas), "$.status")).isEqualTo("TICKETS");
+		send(get("/api/groups/{code}/results", jas.code()), jas, null, 409);
 
+		// Nobody can give the ticket to themselves. Sam gets two tickets, Jas one.
+		giveTicketExpecting(409, jas, "Jas");
+		giveTicket(jas, "Ria");
+		giveTicket(jas, "Sam");
+		giveTicket(ria, "Sam");
+		assertThat(JsonPath.<Integer>read(state(sam), "$.ticketsGiven")).isEqualTo(2);
+		assertThat(JsonPath.<String>read(state(jas), "$.you.ticketFor")).isEqualTo("Sam");
+		giveTicket(sam, "Jas");
+
+		// The last ticket finishes the marathon.
+		assertThat(JsonPath.<String>read(state(jas), "$.status")).isEqualTo("DONE");
 		String results = send(get("/api/groups/{code}/results", jas.code()), sam, null, 200);
-		// Film C wins the three-way tie on enjoyment (9.0 against 7.0); A and B tie completely.
-		assertThat(JsonPath.<List<String>>read(results, "$.films[*].title")).containsExactly("Film C", "Film A",
-				"Film B");
-		assertThat(JsonPath.<List<Integer>>read(results, "$.films[*].rank")).containsExactly(1, 2, 2);
-		assertThat(JsonPath.<List<Double>>read(results, "$.films[*].score")).containsExactly(7.0, 7.0, 7.0);
-		assertThat(JsonPath.<List<Double>>read(results, "$.films[*].enjoyment")).containsExactly(9.0, 7.0, 7.0);
-		assertThat(JsonPath.<List<Integer>>read(results, "$.films[*].raterCount")).containsExactly(2, 2, 2);
+
+		// On ratings alone: Film C wins the three-way tie on enjoyment (9.0 against 7.0),
+		// and A and B tie completely.
+		assertThat(JsonPath.<List<String>>read(results, "$.filmsWithoutTicket[*].title")).containsExactly("Film C",
+				"Film A", "Film B");
+		assertThat(JsonPath.<List<Integer>>read(results, "$.filmsWithoutTicket[*].rank")).containsExactly(1, 2, 2);
+		assertThat(JsonPath.<List<Double>>read(results, "$.filmsWithoutTicket[*].score")).containsExactly(7.0, 7.0,
+				7.0);
+		assertThat(JsonPath.<List<Double>>read(results, "$.filmsWithoutTicket[*].enjoyment")).containsExactly(9.0, 7.0,
+				7.0);
+		assertThat(JsonPath.<List<Integer>>read(results, "$.filmsWithoutTicket[*].raterCount")).containsExactly(2, 2,
+				2);
+
+		// Sam won the ticket outright, so Sam's Film B gains a full point and jumps from last to first.
+		assertThat(JsonPath.<List<String>>read(results, "$.goldenTicket.winners")).containsExactly("Sam");
+		assertThat(JsonPath.<Double>read(results, "$.goldenTicket.boost")).isEqualTo(1.0);
+		assertThat(JsonPath.<List<String>>read(results, "$.films[*].title")).containsExactly("Film B", "Film C",
+				"Film A");
+		assertThat(JsonPath.<List<Integer>>read(results, "$.films[*].rank")).containsExactly(1, 2, 3);
+		assertThat(JsonPath.<List<Double>>read(results, "$.films[*].score")).containsExactly(8.0, 7.0, 7.0);
+		assertThat(JsonPath.<List<Double>>read(results, "$.films[*].ticketBoost")).containsExactly(1.0, 0.0, 0.0);
 	}
 
 	// The anonymity guarantee: a pick in the group state has exactly the film fields and a count,
@@ -104,7 +131,7 @@ class MarathonIntegrationTests {
 		assertPicksAreAnonymous(state(zelda), "Zelda", "Quentin");
 		assertPicksAreAnonymous(state(quentin), "Zelda", "Quentin");
 
-		String started = send(post("/api/groups/{code}/start", zelda.code()), quentin, null, 200);
+		String started = send(post("/api/groups/{code}/start", zelda.code()), zelda, null, 200);
 		assertPicksAreAnonymous(started, "Zelda", "Quentin");
 	}
 
@@ -192,6 +219,113 @@ class MarathonIntegrationTests {
 	}
 
 	@Test
+	void rejoiningGivesANewSessionAndEndsTheOldOne() throws Exception {
+		Player oldPhone = createGroup("Rejoin", "Jas");
+		String rejoinCode = JsonPath.read(state(oldPhone), "$.you.rejoinCode");
+
+		send(post("/api/groups/{code}/rejoin", oldPhone.code()), null, """
+				{"rejoinCode": "WRONG1"}
+				""", 404);
+
+		// Typed in lower case on the new phone; still accepted.
+		String json = send(post("/api/groups/{code}/rejoin", oldPhone.code()), null, """
+				{"rejoinCode": "%s"}
+				""".formatted(rejoinCode.toLowerCase()), 200);
+		Player newPhone = new Player(oldPhone.code(), JsonPath.read(json, "$.token"));
+
+		assertThat(newPhone.token()).isNotEqualTo(oldPhone.token());
+		send(get("/api/groups/{code}", oldPhone.code()), oldPhone, null, 401);
+		String state = state(newPhone);
+		assertThat(JsonPath.<String>read(state, "$.you.nickname")).isEqualTo("Jas");
+		assertThat(JsonPath.<Boolean>read(state, "$.you.host")).isTrue();
+		assertThat(JsonPath.<String>read(state, "$.you.rejoinCode")).isEqualTo(rejoinCode);
+	}
+
+	@Test
+	void onlyTheHostCanRemovePeopleAndLeavingTheLobbyTakesThePickAlong() throws Exception {
+		Player jas = createGroup("Lobby", "Jas");
+		Player sam = join(jas.code(), "Sam");
+		Player ria = join(jas.code(), "Ria");
+		pickManually(sam, "Sam's Film", 2001);
+		assertThat(JsonPath.<String>read(state(sam), "$.host")).isEqualTo("Jas");
+		assertThat(JsonPath.<Boolean>read(state(sam), "$.you.host")).isFalse();
+
+		send(post("/api/groups/{code}/kick", jas.code()), sam, """
+				{"nickname": "Ria"}
+				""", 403);
+		send(post("/api/groups/{code}/kick", jas.code()), jas, """
+				{"nickname": "ria"}
+				""", 204);
+
+		// The removed member's session no longer works.
+		send(get("/api/groups/{code}", jas.code()), ria, null, 401);
+		assertThat(JsonPath.<List<String>>read(state(jas), "$.members")).containsExactly("Jas", "Sam");
+
+		send(post("/api/groups/{code}/leave", jas.code()), sam, null, 204);
+		String state = state(jas);
+		assertThat(JsonPath.<List<String>>read(state, "$.members")).containsExactly("Jas");
+		assertThat(JsonPath.<List<Object>>read(state, "$.picks")).isEmpty();
+	}
+
+	@Test
+	void whenTheHostLeavesTheNextMemberTakesOverAndAnEmptyGroupIsDeleted() throws Exception {
+		Player jas = createGroup("Handover", "Jas");
+		Player sam = join(jas.code(), "Sam");
+
+		send(post("/api/groups/{code}/leave", jas.code()), jas, null, 204);
+		String state = state(sam);
+		assertThat(JsonPath.<String>read(state, "$.host")).isEqualTo("Sam");
+		assertThat(JsonPath.<Boolean>read(state, "$.you.host")).isTrue();
+
+		send(post("/api/groups/{code}/leave", sam.code()), sam, null, 204);
+		send(post("/api/groups/{code}/members", sam.code()), null, """
+				{"nickname": "Late"}
+				""", 404);
+	}
+
+	@Test
+	void removingSomeoneMidMarathonKeepsTheirFilmAndLetsTheRestFinish() throws Exception {
+		Player jas = createGroup("Asleep", "Jas");
+		Player sam = join(jas.code(), "Sam");
+		Player ria = join(jas.code(), "Ria");
+		int filmA = pickManually(jas, "Film A", 2001);
+		int filmB = pickManually(sam, "Film B", 2002);
+		int filmC = pickManually(ria, "Film C", 2003);
+		send(post("/api/groups/{code}/start", jas.code()), jas, null, 200);
+
+		// Jas and Sam rate everything they can. Ria rates one film, then falls asleep.
+		rate(jas, filmB, 5, 5, 5, 5, 5);
+		rate(jas, filmC, 8, 8, 8, 8, 8);
+		rate(sam, filmA, 6, 6, 6, 6, 6);
+		rate(sam, filmC, 8, 8, 8, 8, 8);
+		rate(ria, filmA, 1, 1, 1, 1, 1);
+		assertThat(JsonPath.<String>read(state(jas), "$.status")).isEqualTo("WATCHING");
+
+		send(post("/api/groups/{code}/kick", jas.code()), jas, """
+				{"nickname": "Ria"}
+				""", 204);
+
+		// Ria's film is still in the marathon, and with her gone nothing is left to rate.
+		String state = state(jas);
+		assertThat(JsonPath.<String>read(state, "$.status")).isEqualTo("TICKETS");
+		assertThat(JsonPath.<List<String>>read(state, "$.members")).containsExactly("Jas", "Sam");
+
+		// Two people can only give their tickets to each other: everyone is tied, so no boost.
+		giveTicket(jas, "Sam");
+		giveTicket(sam, "Jas");
+		assertThat(JsonPath.<String>read(state(jas), "$.status")).isEqualTo("DONE");
+
+		String results = send(get("/api/groups/{code}/results", jas.code()), sam, null, 200);
+		// Film C keeps both ratings; Film A loses Ria's 1s along with Ria.
+		assertThat(JsonPath.<List<String>>read(results, "$.films[*].title")).containsExactly("Film C", "Film A",
+				"Film B");
+		assertThat(JsonPath.<List<Double>>read(results, "$.films[*].score")).containsExactly(8.0, 6.0, 5.0);
+		assertThat(JsonPath.<List<Integer>>read(results, "$.films[*].raterCount")).containsExactly(2, 1, 1);
+		assertThat(JsonPath.<List<String>>read(results, "$.goldenTicket.winners")).isEmpty();
+		assertThat(JsonPath.<List<Double>>read(results, "$.films[*].ticketBoost")).containsExactly(0.0, 0.0, 0.0);
+	}
+
+	@Test
 	void rejectsATokenFromAnotherGroup() throws Exception {
 		Player jas = createGroup("Mine", "Jas");
 		Player stranger = createGroup("Theirs", "Stranger");
@@ -225,9 +359,24 @@ class MarathonIntegrationTests {
 
 	private void rate(Player player, int pickId, int scariness, int atmosphere, int story, int acting, int enjoyment)
 			throws Exception {
+		rateExpecting(200, player, pickId, scariness, atmosphere, story, acting, enjoyment);
+	}
+
+	private void rateExpecting(int expectedStatus, Player player, int pickId, int scariness, int atmosphere, int story,
+			int acting, int enjoyment) throws Exception {
 		send(put("/api/picks/{id}/rating", pickId), player, """
 				{"scariness": %d, "atmosphere": %d, "story": %d, "acting": %d, "enjoyment": %d}
-				""".formatted(scariness, atmosphere, story, acting, enjoyment), 200);
+				""".formatted(scariness, atmosphere, story, acting, enjoyment), expectedStatus);
+	}
+
+	private void giveTicket(Player player, String nickname) throws Exception {
+		giveTicketExpecting(204, player, nickname);
+	}
+
+	private void giveTicketExpecting(int expectedStatus, Player player, String nickname) throws Exception {
+		send(put("/api/groups/{code}/ticket", player.code()), player, """
+				{"nickname": "%s"}
+				""".formatted(nickname), expectedStatus);
 	}
 
 	private String state(Player player) throws Exception {

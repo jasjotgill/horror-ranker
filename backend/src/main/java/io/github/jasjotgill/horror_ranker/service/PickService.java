@@ -60,7 +60,8 @@ public class PickService {
 
 		Pick ownLivePick = null;
 		for (Pick existing : picks.findByGroupId(group.getId())) {
-			boolean ownLive = !existing.isVetoed() && existing.getMember().getId().equals(member.getId());
+			boolean ownLive = !existing.isVetoed() && existing.getMember() != null
+					&& existing.getMember().getId().equals(member.getId());
 			if (ownLive) {
 				ownLivePick = existing;
 			}
@@ -84,7 +85,7 @@ public class PickService {
 	@Transactional
 	public void markSeen(Member member, Long pickId) {
 		Pick pick = findLobbyPick(member, pickId);
-		if (pick.getMember().getId().equals(member.getId())) {
+		if (pick.getMember() != null && pick.getMember().getId().equals(member.getId())) {
 			throw ApiException.conflict("You cannot flag your own pick. Change it instead.");
 		}
 		if (seenFlags.findByPickIdAndMemberId(pickId, member.getId()).isEmpty()) {

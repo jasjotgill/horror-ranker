@@ -25,8 +25,9 @@ public class Pick {
 	private MovieGroup group;
 
 	// The picker. The server needs it; no DTO may ever expose it.
-	@ManyToOne(fetch = FetchType.LAZY, optional = false)
-	@JoinColumn(name = "member_id", nullable = false, updatable = false)
+	// Null when the picker left after the marathon started: the film stays, its picker is gone.
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "member_id", updatable = false)
 	private Member member;
 
 	@Enumerated(EnumType.STRING)

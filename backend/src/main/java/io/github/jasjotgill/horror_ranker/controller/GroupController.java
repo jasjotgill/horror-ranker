@@ -4,9 +4,12 @@ import io.github.jasjotgill.horror_ranker.domain.Member;
 import io.github.jasjotgill.horror_ranker.dto.CreateGroupRequest;
 import io.github.jasjotgill.horror_ranker.dto.GroupStateResponse;
 import io.github.jasjotgill.horror_ranker.dto.JoinGroupRequest;
+import io.github.jasjotgill.horror_ranker.dto.KickRequest;
 import io.github.jasjotgill.horror_ranker.dto.MembershipResponse;
+import io.github.jasjotgill.horror_ranker.dto.RejoinRequest;
 import io.github.jasjotgill.horror_ranker.service.GroupService;
 import io.github.jasjotgill.horror_ranker.service.MemberAuthenticator;
+import io.github.jasjotgill.horror_ranker.service.MemberService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,10 +28,14 @@ public class GroupController {
 
 	private final GroupService groupService;
 
+	private final MemberService memberService;
+
 	private final MemberAuthenticator authenticator;
 
-	public GroupController(GroupService groupService, MemberAuthenticator authenticator) {
+	public GroupController(GroupService groupService, MemberService memberService,
+			MemberAuthenticator authenticator) {
 		this.groupService = groupService;
+		this.memberService = memberService;
 		this.authenticator = authenticator;
 	}
 
@@ -57,6 +64,29 @@ public class GroupController {
 			@RequestHeader(value = MemberAuthenticator.TOKEN_HEADER, required = false) String token) {
 		Member caller = authenticator.requireMember(code, token);
 		return groupService.start(code, caller);
+	}
+
+	// No token: this is how someone who has lost theirs gets a new one.
+	@PostMapping("/{code}/rejoin")
+	public MembershipResponse rejoin(@PathVariable String code, @Valid @RequestBody RejoinRequest request) {
+		return memberService.rejoin(code, request.rejoinCode());
+	}
+
+	@PostMapping("/{code}/leave")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void leave(@PathVariable String code,
+			@RequestHeader(value = MemberAuthenticator.TOKEN_HEADER, required = false) String token) {
+		Member caller = authenticator.requireMember(code, token);
+		memberService.leave(caller);
+	}
+
+	// Host only: removes another member from the group.
+	@PostMapping("/{code}/kick")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void kick(@PathVariable String code, @Valid @RequestBody KickRequest request,
+			@RequestHeader(value = MemberAuthenticator.TOKEN_HEADER, required = false) String token) {
+		Member caller = authenticator.requireMember(code, token);
+		memberService.kick(caller, request.nickname());
 	}
 
 	@PostMapping("/{code}/finish")

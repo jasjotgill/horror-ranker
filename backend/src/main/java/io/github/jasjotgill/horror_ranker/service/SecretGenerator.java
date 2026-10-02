@@ -9,9 +9,11 @@ import org.springframework.stereotype.Component;
 public class SecretGenerator {
 
 	// No O, 0, I or 1: they are too easy to mix up when a code is read aloud.
-	private static final String JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+	private static final String CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 	private static final int JOIN_CODE_LENGTH = 4;
+
+	private static final int REJOIN_CODE_LENGTH = 6;
 
 	private static final int TOKEN_BYTES = 32;
 
@@ -19,9 +21,18 @@ public class SecretGenerator {
 	private final SecureRandom random = new SecureRandom();
 
 	public String newJoinCode() {
-		StringBuilder code = new StringBuilder(JOIN_CODE_LENGTH);
-		for (int i = 0; i < JOIN_CODE_LENGTH; i++) {
-			code.append(JOIN_CODE_ALPHABET.charAt(random.nextInt(JOIN_CODE_ALPHABET.length())));
+		return newCode(JOIN_CODE_LENGTH);
+	}
+
+	// Longer than a join code because it stands in for a login, not just an invitation.
+	public String newRejoinCode() {
+		return newCode(REJOIN_CODE_LENGTH);
+	}
+
+	private String newCode(int length) {
+		StringBuilder code = new StringBuilder(length);
+		for (int i = 0; i < length; i++) {
+			code.append(CODE_ALPHABET.charAt(random.nextInt(CODE_ALPHABET.length())));
 		}
 		return code.toString();
 	}
